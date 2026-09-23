@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd, requests, urllib.parse
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="Pluto Mobile", layout="wide", initial_sidebar_state="collapsed")
-st.title("🔱 Pluto MOBILE SCALP")
+st.set_page_config(page_title="Pluto SCALP PRO", layout="wide", initial_sidebar_state="collapsed")
+st.title("🔱 Pluto SCALP PRO (RR 1:2+)")
 
 PHONE = st.secrets.get("WHATSAPP_PHONE", "")
 APIKEY = st.secrets.get("WHATSAPP_APIKEY", "")
@@ -28,7 +28,7 @@ def get_data():
     return float(pd.DataFrame(m15)[4].astype(float).iloc[-1]), to_df(h1), to_df(m15), to_df(m1)
 
 try:
-    with st.spinner("Loading..."):
+    with st.spinner("Loading GOLD..."):
         price,h1,m15,m1 = get_data()
 except:
     st.error("Slow net - tap retry")
@@ -41,38 +41,42 @@ buy_tp=h_lo+(h_hi-h_lo)*0.618; sell_tp=h_hi-(h_hi-h_lo)*0.618
 m_hi=float(m15['H'].tail(60).max()); m_lo=float(m15['L'].tail(60).min())
 buy_e_low=m_lo+(m_hi-m_lo)*0.236; buy_e_high=m_lo+(m_hi-m_lo)*0.382
 sell_e_low=m_lo+(m_hi-m_lo)*0.618; sell_e_high=m_lo+(m_hi-m_lo)*0.764
-mode = st.radio("Mode", ["SCALP 1m", "Swing 15m"], horizontal=True)
 
-if mode=="SCALP 1m":
-    ref_df=m1
-else:
-    ref_df=m15
+mode = st.radio("Mode", ["SCALP 1m (Fast)", "Swing 15m"], horizontal=True)
+ref_df = m1 if "SCALP" in mode else m15
 
-if price < buy_tp and buy_e_low <= price <= buy_e_high:
-    sig="BUY"; sl=m_lo-1.5; tp=buy_tp
-elif price > sell_tp and sell_e_low <= price <= sell_e_high:
-    sig="SELL"; sl=m_hi+1.5; tp=sell_tp
+def calc_rr(entry, sl, tp, is_buy):
+    if is_buy:
+        return (tp-entry)/(entry-sl) if entry!=sl else 0
+    else:
+        return (entry-tp)/(sl-entry) if sl!=entry else 0
+
+rr_buy = calc_rr(price, m_lo-1.5, buy_tp, True) if buy_e_low <= price <= buy_e_high else 0
+rr_sell = calc_rr(price, m_hi+1.5, sell_tp, False) if sell_e_low <= price <= sell_e_high else 0
+
+if price < buy_tp and buy_e_low <= price <= buy_e_high and rr_buy >= 2.0:
+    sig="BUY"; sl=m_lo-1.5; tp=buy_tp; rr=rr_buy
+elif price > sell_tp and sell_e_low <= price <= sell_e_high and rr_sell >= 2.0:
+    sig="SELL"; sl=m_hi+1.5; tp=sell_tp; rr=rr_sell
 else:
-    sig="WAIT"
+    sig="WAIT"; sl=0; tp=0; rr=0
 
 c1,c2,c3=st.columns(3)
 c1.metric("GOLD", f"${price:.2f}"); c2.metric("BUY TP", f"${buy_tp:.1f}"); c3.metric("SELL TP", f"${sell_tp:.1f}")
 
 if sig=="BUY":
-    rr=(tp-price)/(price-sl) if price!=sl else 0
-    st.success(f"🔥 BUY NOW @ ${price:.2f}\n\nSL ${sl:.2f} | TP ${tp:.2f} | RR 1:{rr:.1f}")
+    st.success(f"🔥 BUY NOW @ ${price:.2f}\n\nSL ${sl:.2f} | TP ${tp:.2f} | RR 1:{rr:.1f} (MAX PROFIT)")
     st.audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
-    send_wa(f"🔥 BUY Gold ${price:.2f} SL {sl:.2f} TP {tp:.2f}")
+    send_wa(f"🔥 BUY Gold ${price:.2f} SL {sl:.2f} TP {tp:.2f} RR 1:{rr:.1f}")
     st.balloons()
-    st.code(f"Deriv: BUY XAUUSD 0.01 lot\nSL {sl:.2f}\nTP {tp:.2f}", language="text")
+    st.code(f"Deriv: BUY XAUUSD 0.01 lot\nSL {sl:.2f}\nTP {tp:.2f}\nRR 1:{rr:.1f}", language="text")
 elif sig=="SELL":
-    rr=(price-tp)/(sl-price) if sl!=price else 0
-    st.error(f"🔻 SELL NOW @ ${price:.2f}\n\nSL ${sl:.2f} | TP ${tp:.2f} | RR 1:{rr:.1f}")
+    st.error(f"🔻 SELL NOW @ ${price:.2f}\n\nSL ${sl:.2f} | TP ${tp:.2f} | RR 1:{rr:.1f} (MAX PROFIT)")
     st.audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
-    send_wa(f"🔻 SELL Gold ${price:.2f} SL {sl:.2f} TP {tp:.2f}")
-    st.code(f"Deriv: SELL XAUUSD 0.01 lot\nSL {sl:.2f}\nTP {tp:.2f}", language="text")
+    send_wa(f"🔻 SELL Gold ${price:.2f} SL {sl:.2f} TP {tp:.2f} RR 1:{rr:.1f}")
+    st.code(f"Deriv: SELL XAUUSD 0.01 lot\nSL {sl:.2f}\nTP {tp:.2f}\nRR 1:{rr:.1f}", language="text")
 else:
-    st.info(f"⏳ WAIT - Price ${price:.2f}\nBUY zone ${buy_e_low:.1f}-${buy_e_high:.1f}\nSELL zone ${sell_e_low:.1f}-${sell_e_high:.1f}")
+    st.info(f"⏳ WAIT - RR < 1:2 filtered out\nPrice ${price:.2f}\nBUY {buy_e_low:.1f}-{buy_e_high:.1f} (RR {rr_buy:.1f})\nSELL {sell_e_low:.1f}-{sell_e_high:.1f} (RR {rr_sell:.1f})")
 
 fig=go.Figure(data=[go.Candlestick(x=ref_df['T'], open=ref_df['O'], high=ref_df['H'], low=ref_df['L'], close=ref_df['C'])])
 fig.add_hline(y=buy_tp, line_color="green", line_dash="dash"); fig.add_hline(y=sell_tp, line_color="red", line_dash="dash")
@@ -87,8 +91,7 @@ with col1:
         st.cache_data.clear(); st.rerun()
 with col2:
     if st.button("📲 Test WhatsApp", use_container_width=True):
-        send_wa(f"✅ Pluto Mobile TEST OK Gold ${price:.2f}")
+        send_wa(f"✅ Pluto SCALP TEST OK Gold ${price:.2f} RR {rr:.1f}")
         st.success("Sent!")
 
-# Auto refresh light JS (no heavy plugin)
 st.markdown("<script>setTimeout(()=>{window.location.reload()}, 30000);</script>", unsafe_allow_html=True)
